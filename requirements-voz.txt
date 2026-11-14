@@ -1,0 +1,2 @@
+# Optional local pronunciation recognition; the base demo does not need it.
+faster-whisper==1.2.1

@@ -1,0 +1,13 @@
+{
+  "id": "DEMO",
+  "titulo": "MOVIMIENTO",
+  "curso": "general",
+  "especialista": "demo",
+  "concepto": "Animar una figura y un indicador",
+  "estado": "prueba",
+  "beats": [
+    {"id":"b1","personaje":"demo","voz":"manual","texto":"Esta figura avanza hasta el centro.","escenario":"vacio","visual":"Una pinza desplaza un disco."},
+    {"id":"b2","personaje":"demo","voz":"manual","texto":"La pinza señala hacia una posición elevada.","escenario":"vacio","visual":"El brazo mecánico cambia de altura."},
+    {"id":"b3","personaje":"demo","voz":"manual","texto":"El indicador confirma que terminó el movimiento.","escenario":"vacio","visual":"Se completa la barra del módulo."}
+  ]
+}
