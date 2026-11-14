@@ -160,11 +160,14 @@ def crear(carpeta, destino=None):
         cuerpo.append(f"        # {bid}: {comentario}")
         if receta:
             if receta != receta_actual:
-                cuerpo += [f"        montaje = aplicar_receta(self, {receta!r})", "        personaje = montaje.personaje"]
+                # self.montar(): corte a mitad de la pausa + receta (con ajustes_receta del guion) + objetos fijos
+                args = [repr(receta)]
                 if receta in por_receta:
-                    todos = ", ".join(n for n, _ in por_receta[receta])
+                    args += [n for n, t in por_receta[receta] if not t]
                     toc = ", ".join(n for n, t in por_receta[receta] if t)
-                    cuerpo.append(f"        objetos_en_mesa(self, montaje, {todos}, tocados=({toc}{',' if toc else ''}))")
+                    if toc:
+                        args.append(f"tocados=({toc},)")
+                cuerpo += [f"        montaje = self.montar({', '.join(args)})", "        personaje = montaje.personaje"]
                 receta_actual = receta
         else:
             receta_actual = None

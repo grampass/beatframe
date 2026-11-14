@@ -404,6 +404,8 @@ from pruebas_actuacion import PRUEBAS as PRUEBAS_ACTUACION   # recetas de actuac
 PRUEBAS += PRUEBAS_ACTUACION
 from pruebas_voz import PRUEBAS as PRUEBAS_VOZ   # filtro de pronunciación (2026-11-13)
 PRUEBAS += PRUEBAS_VOZ
+from pruebas_corte import PRUEBAS as PRUEBAS_CORTE   # corte, cola de voz, esquema y sugerencia (2026-11-14)
+PRUEBAS += PRUEBAS_CORTE
 from pruebas_configuracion import PRUEBAS as PRUEBAS_CONFIGURACION
 PRUEBAS += PRUEBAS_CONFIGURACION
 from pruebas_registro import PRUEBAS as PRUEBAS_REGISTRO

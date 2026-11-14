@@ -63,6 +63,7 @@ class Guion:
         datos = json.loads((carpeta / "guion.json").read_text(encoding="utf-8"))
         tiempos = json.loads((carpeta / "audio" / "tiempos.json").read_text(encoding="utf-8"))
         self.titulo = datos["titulo"]
+        self.ajustes_receta = datos.get("ajustes_receta", {}) or {}      # recetas.aplicar_receta los aplica solos
         self.beats, self.palabras, t = [], [], inicio
         for b in datos["beats"]:
             pal = [dict(p, t=p["t"] + t) for p in tiempos[b["id"]]]
@@ -168,6 +169,56 @@ def latir(mob, escena, variantes, periodo=0.22, desfase=0.0):
     mob.add_updater(paso)
     paso(mob, 0)
     return mob
+
+
+class Esquema(VGroup):
+    """Dibujo explicativo por PARTES que entran en momentos distintos (2026-11-14).
+    Se dibuja en coordenadas locales: `self.parte("ondas", mob)` registra cada parte (visible=True la añade ya) y
+    `colocar(escala, centro)` escala y mueve TODAS, también las que aún no se han añadido. Así una parte que entra
+    después (FadeIn(esq.ondas), Create(...)) cae en su sitio y no a escala 1 en el origen."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.partes = {}
+
+    def parte(self, nombre, mob, visible=False):
+        if nombre in self.partes:
+            raise ValueError(f"Esquema: la parte «{nombre}» ya existe")
+        if hasattr(self, nombre):
+            raise ValueError(f"Esquema: «{nombre}» choca con un atributo de VGroup; usa otro nombre")
+        self.partes[nombre] = mob
+        setattr(self, nombre, mob)
+        if visible:
+            self.add(mob)
+        return mob
+
+    def colocar(self, escala=1.0, centro=(0.0, 0.0)):
+        mover = lambda m: m.scale(escala, about_point=ORIGIN).shift([centro[0], centro[1], 0])
+        dentro = {id(m) for m in self.get_family()}
+        for m in self.partes.values():
+            if id(m) not in dentro:          # las de dentro ya se transforman con el grupo
+                mover(m)
+        mover(self)
+        return self
+
+
+def instante_corte(inicios, t, margen=0.1, deriva=0.2):
+    """Instante para cambiar de plano en un diálogo: `margen` s antes del beat siguiente, a mitad de la pausa, cuando
+    el subtítulo anterior ya se fue y el siguiente aún no entra. Devuelve None si no hay que esperar (inicio del video,
+    ya pasado o no queda beat). `deriva`: a 15 fps el reloj real puede ir unas centésimas por delante del beat."""
+    if t <= 0.01:
+        return None
+    sig = [i for i in inicios if i > t - deriva]
+    if not sig or min(sig) - margen <= t:
+        return None
+    return min(sig) - margen
+
+
+def sugerir_palabra(palabras, t_desde, fin, antes=0.15, min_dur=0.15):
+    """La palabra más tardía del beat en la que una animación de `min_dur` aún cabe antes de `fin` sin esperar a
+    antes de `t_desde`. None si no hay ninguna. Para el aviso de retraso de EscenaEstudio.en()."""
+    validas = [p["w"].strip("¿?¡!.,…") for p in palabras if p["t"] - antes >= t_desde - 1e-6 and fin - (p["t"] - antes) >= min_dur]
+    return validas[-1] if validas else None
 
 
 def _opacidades(mob):
@@ -403,7 +454,56 @@ class EscenaEstudio(Scene):
             self._tramo = None
         self._vigila = True
 
+    def fin_voz(self):
+        """Segundo en que termina la ÚLTIMA voz real (inicio de su beat + duración del mp3). Puede pasar de g.total:
+        el mp3 trae una cola de silencio que el guion no cuenta."""
+        from sonido import duraciones_video
+        fin = 0.0
+        for b in self.g.beats:
+            try:
+                fin = max(fin, b["ini"] + duraciones_video(b["archivo"]).get("audio", 0.0))
+            except Exception:                       # sin ffprobe o sin archivo: lo vigila producir.py
+                pass
+        return fin
+
+    def cubrir_voz(self):
+        """Alarga la imagen hasta el final de la última voz (antes había que poner self.wait(0.3) a mano al final de
+        cada escena: si no, producir.py paraba con «audio ausente o duración desalineada»). La llama tear_down."""
+        if self.carpeta is None or getattr(self, "_tramo", None) is not None or os.environ.get("SOLO_CHOQUES") == "1":
+            return 0.0
+        falta = self.fin_voz() - self.renderer.time
+        if falta > 1.5 / config.frame_rate:
+            self.wait(falta)
+            return falta
+        return 0.0
+
+    def corte(self, margen=0.1):
+        """Cambio de plano limpio entre personajes (diálogos): espera hasta `margen` s antes del beat siguiente.
+        Llamarlo ANTES de montar el plano nuevo. Evita el subtítulo de uno sobre el plano del otro (se ve a 30 fps) y
+        tolera que a 15 fps el reloj vaya unas centésimas por delante (antes, un min() vacío rompía el render)."""
+        t = instante_corte([b["ini"] for b in self.g.beats], self.renderer.time, margen)
+        if t is not None:
+            self.hasta(t)
+
+    def montar(self, receta, *objetos, tocados=(), corte=True, poner=None, **ajustes):
+        """Plano de un personaje en UNA línea (diálogos, 2026-11-14): corte limpio a mitad de la pausa, receta con los
+        ajustes del guion («ajustes_receta») y los de aquí, y los MISMOS objetos de la mesa en el mismo sitio en cada
+        vuelta (los que el personaje toca, en `tocados`). `poner`: pose inicial del personaje, p. ej.
+        dict(gesto=MIRA_CUADERNO). Devuelve el montaje (montaje.personaje, montaje.escenario)."""
+        from recetas import aplicar_receta, objetos_en_mesa
+        if corte:
+            self.corte()
+        montaje = aplicar_receta(self, receta, **ajustes)
+        if objetos or tocados:
+            sueltos = [o for o in objetos if not any(o is t for t in tocados)]
+            objetos_en_mesa(self, montaje, *sueltos, *tocados, tocados=tocados)
+        if poner:
+            montaje.personaje.poner(**poner)
+        return montaje
+
     def tear_down(self):
+        if getattr(self, "g", None) is not None:
+            self.cubrir_voz()
         super().tear_down()
         if self._registro is not None and self.carpeta is not None:
             self._registro.guardar(self._revision_dir / "choques.json")
@@ -605,12 +705,16 @@ class EscenaEstudio(Scene):
         """Espera a la palabra y ejecuta las animaciones ENCAJADAS en el hueco que queda hasta `tope`
         (otra marca: (bid, palabra); por defecto, el final del beat). Si el hueco es menor que `run_time`, las acorta;
         si ni así caben (menos de `min_dur`), avisa con el beat y la palabra."""
+        desde = self.renderer.time
         self.hasta(self.g.t_palabra(bid, palabra, n) - antes)
         fin = (self.g.t_palabra(*tope) - 0.05) if tope else self.g[bid]["fin"]
         hueco = fin - self.renderer.time
         if hueco < min_dur:
-            self._retrasos.append(dict(beat=bid, palabra=palabra, t=float(fin), retraso=float(min_dur - hueco)))
-            print(f"[AVISO] vas {min_dur - hueco:.2f} s tarde respecto a t={fin:.2f} (en «{palabra}» de {bid} no caben las animaciones)")
+            otra = sugerir_palabra(self.g[bid]["palabras"], desde, fin, antes, min_dur)
+            pista = f"; prueba anclarla en «{otra}»" if otra and otra.lower() != palabra.lower() else ""
+            self._retrasos.append(dict(beat=bid, palabra=palabra, t=float(fin), retraso=float(min_dur - hueco),
+                                       sugerencia=otra))
+            print(f"[AVISO] vas {min_dur - hueco:.2f} s tarde respecto a t={fin:.2f} (en «{palabra}» de {bid} no caben las animaciones{pista})")
         self.play(*anims, run_time=max(min_dur, min(run_time, hueco)), **kw)
 
     # ----- HUD -----

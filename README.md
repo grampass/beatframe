@@ -1,61 +1,78 @@
-# Scripted animation toolkit
+# beatframe
 
-Build vertical animated scenes from a structured script, word cues and reusable vector components.
+**Write a script. Get a narrated, word-synced vertical animation.**
 
-[Español](README.es.md). The API and example captions currently use Spanish.
+![Narrated demo: a small robot reacts on each spoken word](docs/demo-voice.gif)
 
-![Geometry example](ejemplo/demo.gif)
+▶ [Watch the demo with sound (MP4, 21 s)](docs/demo-voice.mp4) · [Español](README.es.md)
+
+In a timeline editor, every animation is pinned to a time. Change one sentence of the narration and everything after it drifts. In beatframe, animations are pinned to **words**: "on *push*, the ball rolls". The voice is generated (or supplied) with word timings, and the scene waits for each word, so it stays in sync when the text changes.
+
+```python
+self.en("b3", "push", ball.animate.shift(RIGHT), robot.anim(pose="explica"), run_time=0.9)
+self.en("b4", "charge", robot.anim(carga=1.0), run_time=1.2)
+```
+
+It is built on [Manim](https://www.manim.community/) and aimed at short vertical explainers (9:16).
 
 ## What it does
 
-- Schedule animations at word cues and keep subtitles aligned with the scene clock.
-- Render through Manim with a camera that culls invisible objects and caches backgrounds.
-- Check text overlap, size, contrast estimates and configurable safe areas.
-- Mix optional effects and tracks below narration, and verify audio coverage.
-- Resume production stages using input hashes; refuse to confirm outputs if their sources change during a run.
-- Load optional local components and validation policies through an external manifest.
+- **Word-anchored timing.** `self.en(beat, word, *animations)` waits for the word and fits the animations in the time left before the beat ends. If they do not fit, it tells you how late you are and suggests a word where they would fit.
+- **Subtitles from the voice.** Word timings drive karaoke-style subtitles and the character's mouth.
+- **Automatic review before rendering.** A dry run, without drawing, checks overlapping text, text that is too small, crowded screens and safe areas, at both 15 and 30 fps. A late animation or an overlap stops the render and shows you where it is.
+- **Review sheets.** Every render writes contact sheets: the last frame of each beat, plus safe-area overlays for the main vertical platforms.
+- **Pronunciation check (optional).** A local speech recognizer listens to every generated sentence and flags words that came out wrong, before anyone watches the video.
+- **Resumable stages.** Voice, checks, render, mix and sheets are cached by input hash. A run refuses to deliver if its sources change halfway.
+- **Characters as state.** A character is a set of poses plus a drawing function. `Demo`, the robot above, is built from primitives only (no images or fonts) and is the template for your own.
 
 ## Quick start
 
-The tested environment is Python 3.11 on Windows, with the exact package versions in `requirements-publico.txt`. Install FFmpeg and the system dependencies required by [Manim](https://docs.manim.community/en/stable/installation.html), then:
+Tested with Python 3.11 on Windows; the tests also run on Linux in CI. Install FFmpeg and the system packages [Manim needs](https://docs.manim.community/en/stable/installation.html), then:
 
 ```sh
 python -m venv .venv
-# Activate the environment using the command for your shell.
+# activate it with the command for your shell
 python -m pip install -r requirements-publico.txt
-python motor/pruebas_motor.py
-python ejemplo/ejecutar.py
+python motor/pruebas_motor.py        # ~1 minute, no network
+python ejemplo/ejecutar.py           # offline example: tones instead of a voice
+python demo-voz/ejecutar.py          # the narrated demo above (needs internet for the voice)
 ```
 
-The last command prepares local audio fixtures and calls `motor/producir.py`. It writes `ejemplo/vista-previa.mp4` and review sheets under `ejemplo/revision/`. For full resolution:
+Each run writes `vista-previa.mp4` (540×960, 15 fps) and review sheets in the folder's `revision/`. Add `--final` for 1080×1920 at 30 fps.
 
-```sh
-python ejemplo/ejecutar.py --final
+## Make your own scene
+
+1. **Script:** copy `demo-voz/guion.json`. One beat per sentence: `id`, `personaje`, `voz` (an [edge-tts](https://github.com/rany2/edge-tts) voice name), `texto`, `escenario`, `visual`. Set `"idioma"` to the language of the script.
+2. **Scene:** copy `demo-voz/escena.py`. Subclass `EscenaEstudio`, add your objects, and anchor each action to a word with `self.en(...)`.
+3. **Produce:** `python motor/producir.py <folder>`. Use `--choques` to run only the checks, which takes seconds to minutes depending on length.
+
+`python motor/producir.py <folder> --crear-escena` writes a scene skeleton from the script. It is a draft to complete, not a finished animation.
+
+## How it works
+
+```
+guion.json ─► voice + word timings ─► pronunciation check ─► dry run at 15 and 30 fps (composition, timing)
+           ─► render ─► audio coverage and format check ─► review sheets ─► vista-previa.mp4 / final.mp4
 ```
 
-The offline example uses quiet synthesized tones and authored word cues, **not spoken narration**. It does not call a speech service. A geometric unit moves a disk, points upward and fills an indicator; its design is built from primitives with no bundled images or font files.
+## Honest limits
 
-## Create a scene
+- The API and the messages are in **Spanish** (`escena`, `guion`, `hasta`, `fin_beat`…). English aliases are a welcome first contribution.
+- Speech uses `edge-tts`, an external service: the narrated demo needs internet. The offline example and the tests do not.
+- The composition checks sample the animation; they do not certify every pixel, the science or the editing. Watch the result.
+- Windows is the tested platform; Linux runs the test suite in CI; macOS is untested.
+- Not on PyPI yet: clone the repository and run from its root.
 
-1. Write `guion.json`: one beat per phrase, with `id`, `personaje`, explicit `voz`, `texto`, `escenario` and `visual`.
-2. Supply narration plus measured word timings, or use the optional speech integration to generate them. The speech integration uses `edge-tts`, an external service; it is not an offline guarantee.
-3. Subclass `EscenaEstudio` in `escena.py`, set `carpeta` to its folder and import `Demo` from `personajes.demo` as a starting point.
-4. Call `self.en(...)` to anchor an animation to a word, or use `hasta` and `fin_beat` for beat boundaries. Run `python motor/producir.py <folder>`.
+## Configuration
 
-`ejemplo/escena.py` is a complete small scene. Do not treat generated scene skeletons as finished animations: they deliberately require review.
+Without a manifest the toolkit uses neutral defaults: no assigned voices and no registered scene recipes. `MOTOR_CONFIG=-` explicitly disables extensions, and the examples and tests use this mode. To extend it, point `MOTOR_CONFIG` to a JSON manifest `{"configuracion": "<dir>"}`, whose `config.json` may define `voces`, `prosodia`, `visual`, `rutas` and `extensiones`. Extensions are trusted Python code, so load only files you control.
 
-## Configuration and checks
+The pronunciation check needs `python -m pip install -r requirements-voz.txt` (faster-whisper; the first run downloads a model). Without it, production continues and warns.
 
-Without an external manifest the toolkit uses neutral defaults and has no assigned voices or registered scene recipes. `MOTOR_CONFIG=-` explicitly disables extensions; the example and main test command use this mode. Tests simulate speech and require no speech-service credentials.
+## Contributing
 
-For extensions, point `MOTOR_CONFIG` at a JSON manifest containing `{"configuracion":"<config-directory>"}`. That directory supplies `config.json`; optional keys include `voces`, `prosodia`, `visual`, `rutas`, `extensiones` and `modulos_compatibles`. Extensions are trusted Python code. Only load files you control.
-
-Automatic composition checks sample the animation; they do not certify every pixel, scientific content or editorial quality. Contrast and organic-platform safe-area profiles are estimates unless calibrated. Inspect the generated review sheets and play the complete result. Only Windows has been tested for this distribution.
-
-Tests: `python motor/pruebas_motor.py`. A visual regression catalog is optional and supplied by configuration; no production-specific catalog is bundled by default.
-
-Local pronunciation recognition is optional: install `python -m pip install -r requirements-voz.txt` to use `pronunciacion.py` with `faster-whisper`. Its first model load can download weights; the basic tests and geometry example do not require it. Speech synthesis and local pronunciation recognition are separate integrations.
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the issues labelled **good first issue**. Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The license applies to the software and documentation included in this distribution. Dependencies and external services retain their own licenses and terms.
+MIT, see [LICENSE](LICENSE). Dependencies and external services keep their own licenses and terms.

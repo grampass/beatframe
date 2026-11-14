@@ -1,0 +1,17 @@
+{
+  "id": "DEMO-VOICE",
+  "titulo": "SCRIPT TO SCENE",
+  "curso": "general",
+  "especialista": "demo",
+  "concepto": "Animations scheduled on spoken words",
+  "estado": "prueba",
+  "idioma": "en",
+  "beats": [
+    {"id": "b1", "personaje": "demo", "voz": "en-US-AriaNeural", "texto": "Hi! I am a scene written as a script, not a timeline.", "escenario": "vacio", "visual": "The robot waves on «Hi» and smiles.", "claves": {"script": "ambar"}},
+    {"id": "b2", "personaje": "demo", "voz": "en-US-AriaNeural", "texto": "Every move waits for a spoken word.", "escenario": "vacio", "visual": "On «word» the robot points up and a label appears.", "claves": {"word": "ambar"}},
+    {"id": "b3", "personaje": "demo", "voz": "en-US-AriaNeural", "texto": "When I say push, this ball rolls away.", "escenario": "vacio", "visual": "The hand reaches the ball and, on «push», the ball rolls to the right.", "claves": {"push": "ambar"}},
+    {"id": "b4", "personaje": "demo", "voz": "en-US-AriaNeural", "texto": "When I say charge, my antenna lights up.", "escenario": "vacio", "visual": "On «charge» the antenna light and the chest meter fill up.", "claves": {"charge": "ambar"}},
+    {"id": "b5", "personaje": "demo", "voz": "en-US-AriaNeural", "texto": "Overlaps and late moves are caught before rendering.", "escenario": "vacio", "visual": "A checklist draws its tick on «caught»; the robot looks at it.", "claves": {"caught": "ambar"}},
+    {"id": "b6", "personaje": "demo", "voz": "en-US-AriaNeural", "texto": "Write the words. The timing takes care of itself.", "escenario": "vacio", "visual": "The robot returns to rest, happy, with the antenna still lit.", "claves": {"timing": "ambar"}}
+  ]
+}

@@ -97,12 +97,12 @@ def _guion_gen(**extra_b1):
 def a_generador_convierte_acciones():
     s = _generar(_guion_gen())
     assert "taza2 = TazaVacia((-0.15, -3.86), 0.6)" in s and "taza2.importante = True" in s
-    assert "objetos_en_mesa(self, montaje, taza2, tocados=(taza2,))" in s
+    assert "self.montar('demostracion', tocados=(taza2,))" in s, s
     assert "*empujar(personaje, taza2, (-0.6, -3.9))" in s and "NotaGrande('Listo para probar')" in s
     assert "self.desenfocar_anim(ambiente='laboratorio')" in s, "El inserto de b1 no se cierra al pasar a b2"
     assert "# Sugerencia: personaje.anim(**personaje.alcanzar" in s, "b2 sin acciones no recibe sugerencias"
     assert "pendiente_animar = True" in s
-    assert s.index("aplicar_receta") < s.index("self.hasta(g['b1']['ini'])"), "El escenario se monta después de esperar"
+    assert s.index("self.montar(") < s.index("self.hasta(g['b1']['ini'])"), "El escenario se monta después de esperar"
 
 
 def a_generador_rechaza_acciones_invalidas():

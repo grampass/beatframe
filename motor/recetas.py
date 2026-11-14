@@ -1,5 +1,5 @@
 """Montajes y orden de capas suministrados por componentes registrados."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from registro import registro_actual
 
@@ -10,20 +10,35 @@ class Montaje:
     personaje: object
     capas: list
     escenario: object = None
+    opciones: dict = field(default_factory=dict)
 
 
 RECETAS = registro_actual().descripciones
 
 
-def aplicar_receta(escena, nombre):
+def opciones_receta(escena, nombre, explicitas=None):
+    """Ajustes del escenario para esta receta: los del guion («ajustes_receta»: {receta: {...}}) y encima los de la
+    llamada. Así un ajuste decidido en el guion (p. ej. un objeto frío) no depende de acordarse en cada escena."""
+    guion = getattr(getattr(escena, "g", None), "ajustes_receta", None) or {}
+    return {**guion.get(nombre, {}), **(explicitas or {})}
+
+
+def aplicar_receta(escena, nombre, **opciones):
     r = registro_actual()
     if nombre not in r.recetas:
         raise ValueError(f"Receta desconocida {nombre!r}; disponibles: {', '.join(RECETAS)}")
+    opciones = opciones_receta(escena, nombre, opciones)
     anterior = getattr(escena, "_receta_actual", None)
-    if anterior and anterior.nombre == nombre:
+    if anterior and anterior.nombre == nombre and anterior.opciones == opciones:
         return anterior
     datos = RECETAS[nombre]
-    montaje, plano, sub_y = r.recetas[nombre](escena, nombre, datos)
+    try:
+        montaje, plano, sub_y = r.recetas[nombre](escena, nombre, datos, **opciones)
+    except TypeError as e:
+        if not opciones:
+            raise
+        raise ValueError(f"La receta {nombre!r} no acepta los ajustes {sorted(opciones)}: {e}") from e
+    montaje.opciones = dict(opciones)
     if anterior:
         escena.remove(*anterior.capas)
     escena.plano, escena.sub_y = plano, sub_y

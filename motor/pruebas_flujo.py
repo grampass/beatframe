@@ -183,6 +183,9 @@ class Simulador:
         if cmd[1].endswith("tts.py"):
             self.llamadas.append("voz-comprobar" if "--comprobar" in cmd else "voz")
             return 0, "voz ya preparada"
+        if cmd[1].endswith("pronunciacion.py"):
+            self.llamadas.append("pronunciacion")
+            return 0, "Pronunciación: sin marcas"
         if cmd[1].endswith("revisar.py"):
             self.llamadas.append("hojas")
             out = Path(cmd[6]); out.mkdir(parents=True)
@@ -344,7 +347,7 @@ def f_generador_receta_y_contrato_compartido():
         with registro_demo():
             f = crear(p)
         s = f.read_text(encoding="utf-8")
-        assert "aplicar_receta(self, 'demostracion')" in s and "pendiente_animar = True" in s
+        assert "self.montar('demostracion')" in s and "pendiente_animar = True" in s
 
 
 def f_pista_propia_baja_bajo_voz_y_conserva_cierre():

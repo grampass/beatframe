@@ -106,7 +106,7 @@ def mas_lento(rate, paso=6):
 
 
 # ---------- escucha (necesita el modelo) ----------
-def escuchar(ruta):
+def escuchar(ruta, idioma="es"):
     global _modelo
     if _modelo is None:
         import logging
@@ -115,23 +115,27 @@ def escuchar(ruta):
         logging.getLogger("faster_whisper").setLevel(logging.ERROR)
         from faster_whisper import WhisperModel
         _modelo = WhisperModel(MODELO, device="cpu", compute_type="int8")
-    segs, _ = _modelo.transcribe(str(ruta), language="es", word_timestamps=True, beam_size=5,
+    segs, _ = _modelo.transcribe(str(ruta), language=idioma, word_timestamps=True, beam_size=5,
                                  condition_on_previous_text=False, vad_filter=False)
     return [w.word.strip() for s in segs for w in s.words]
 
 
-def revisar_beat(b, ruta, lexico, cache):
+def revisar_beat(b, ruta, lexico, cache, idioma="es"):
+    """`idioma`: el del guion (campo «idioma», por defecto «es»); la caché vale para esa huella y ese idioma."""
     h = sha256(ruta)
-    if cache.get(b["id"], {}).get("sha256") != h:
-        cache[b["id"]] = dict(sha256=h, oido=escuchar(ruta))
+    previo = cache.get(b["id"], {})
+    if previo.get("sha256") != h or previo.get("idioma", "es") != idioma:
+        cache[b["id"]] = dict(sha256=h, oido=escuchar(ruta, idioma), **({} if idioma == "es" else dict(idioma=idioma)))
     oido = cache[b["id"]]["oido"]
+    if cache[b["id"]].get("aprobado"):                     # un humano la escuchó: este audio exacto vale
+        return [], oido
     marcas = {m["i"]: m for m in riesgos(b["texto"], b.get("personaje"), lexico)}
     for m in comparar(b["texto"], oido):
         marcas[m["i"]] = m                                   # lo oído manda sobre el léxico
     return sorted(marcas.values(), key=lambda m: m["i"]), oido
 
 
-async def _variantes(b, marcas, destino):
+async def _variantes(b, marcas, destino, idioma="es"):
     from tts import decir
     texto, voz, rate, pitch = argumentos_voz(b)
     pedidas, vistos = [], set()
@@ -149,11 +153,56 @@ async def _variantes(b, marcas, destino):
         except RuntimeError:                                 # edge-tts falla a ratos: se omite esa variante y se avisa
             print(f"  {b['id']}: no se pudo generar la variante «{nombre}»; se omite")
             continue
-        oido = escuchar(ruta)
+        oido = escuchar(ruta, idioma)
         fallan = {m["palabra"].lower() for m in comparar(t, oido)}
         siguen = [x["palabra"] for x in marcas if x["palabra"].lower() in fallan]
         hechas.append(dict(n=n, que=nombre, texto=t, rate=r, ruta=ruta, oido=" ".join(oido), siguen=siguen))
     return hechas
+
+
+def frase_de(texto, i):
+    """La frase (entre signos de cierre) que contiene la palabra i: lo que se guarda como «aprobada»."""
+    w, ini, fin, _ = palabras_texto(texto)[i]
+    a = max([texto.rfind(c, 0, ini) for c in ".!?;¿¡…"] + [-1]) + 1
+    zs = [k for k in (texto.find(c, fin) for c in ".!?;…") if k >= 0]
+    return texto[a:min(zs) if zs else len(texto)].strip(" ,")
+
+
+def aprobar(carpeta, beats_ids):
+    """Marca como aprobada la voz actual de esos beats y lleva sus frases marcadas al léxico."""
+    carpeta = Path(carpeta)
+    guion = json.loads((carpeta / "guion.json").read_text(encoding="utf-8"))
+    lexico = leer_json(LEXICO, {}) or {}
+    f_cache = carpeta / "audio" / "pronunciacion.json"
+    cache = leer_json(f_cache, {}) or {}
+    por_id = {b["id"]: b for b in guion["beats"]}
+    nuevas = []
+    for bid in beats_ids:
+        if bid not in por_id:
+            raise ValueError(f"{bid}: no es un beat del guion")
+        b = por_id[bid]
+        marcas, _ = revisar_beat(b, carpeta / "audio" / f"{bid}.mp3", lexico, cache, guion.get("idioma", "es"))
+        cache[bid]["aprobado"] = True
+        for m in marcas:
+            f = frase_de(b["texto"], m["i"])
+            if f and f not in lexico.setdefault("aprobadas", []) and f not in nuevas:
+                nuevas.append(f)
+    escribir_json(f_cache, cache)
+    if nuevas:
+        lexico["aprobadas"] += nuevas
+        escribir_json(LEXICO, lexico)
+    return nuevas
+
+
+def marcar_riesgo(carpeta, bid, palabra, solo_inicio=False, nota=""):
+    guion = json.loads((Path(carpeta) / "guion.json").read_text(encoding="utf-8"))
+    b = next((x for x in guion["beats"] if x["id"] == bid), None)
+    if b is None:
+        raise ValueError(f"{bid}: no es un beat del guion")
+    lexico = leer_json(LEXICO, {}) or {}
+    lexico.setdefault("riesgo", {})[palabra.lower()] = dict(voz=b.get("personaje"), solo_inicio=bool(solo_inicio),
+                                                           nota=nota or f"{guion.get('id', '')} {bid}: señalada al escuchar")
+    escribir_json(LEXICO, lexico)
 
 
 def unir(rutas, salida, silencio=0.9):
@@ -178,11 +227,13 @@ def main(carpeta, con_variantes=True):
         ruta = carpeta / "audio" / f"{b['id']}.mp3"
         if not ruta.is_file():
             raise FileNotFoundError(f"{b['id']}: falta la voz; genera antes con producir.py")
-        marcas, oido = revisar_beat(b, ruta, lexico, cache)
+        marcas, oido = revisar_beat(b, ruta, lexico, cache, guion.get("idioma", "es"))
         escribir_json(f_cache, cache)
         if marcas:
             marcados.append((b, marcas, oido))
     print(f"Pronunciación: {len(guion['beats'])} beats escuchados, {len(marcados)} con palabras marcadas")
+    escribir_json(carpeta / "audio" / "pronunciacion-marcas.json",
+                  {b["id"]: [dict(palabra=m["palabra"], oido=m["oido"], motivo=m["motivo"]) for m in marcas] for b, marcas, _ in marcados})
     for b, marcas, oido in marcados:
         print(f"  {b['id']}: " + "; ".join(f"«{m['palabra']}» → {m['oido']} ({m['motivo']})" for m in marcas))
     if not marcados or not con_variantes:
@@ -195,7 +246,7 @@ def main(carpeta, con_variantes=True):
                             "(o la original). Lo que dice el reconocedor orienta; la última palabra es del oído humano. "
                             "Las marcas del léxico no las puede comprobar el reconocedor.", ""], 0
     for b, marcas, oido in marcados:
-        hechas = asyncio.run(_variantes(b, marcas, destino))
+        hechas = asyncio.run(_variantes(b, marcas, destino, guion.get("idioma", "es")))
         lineas.append(f"## {b['id']} · marcadas: " + ", ".join(f"«{m['palabra']}» (se oye: {m['oido']})" for m in marcas))
         k += 1
         rutas.append(carpeta / "audio" / f"{b['id']}.mp3")
@@ -223,7 +274,16 @@ if __name__ == "__main__":
         except (AttributeError, ValueError):
             pass
     try:
-        main(Path(sys.argv[1]), con_variantes="--sin-variantes" not in sys.argv)
+        args = sys.argv[1:]
+        if "--aprobar" in args:
+            nuevas = aprobar(Path(args[0]), [a for a in args[args.index("--aprobar") + 1:] if not a.startswith("--")])
+            print("Aprobado. Frases nuevas en el léxico: " + (", ".join(f"«{f}»" for f in nuevas) or "ninguna"))
+        elif "--riesgo" in args:
+            i = args.index("--riesgo")
+            marcar_riesgo(Path(args[0]), args[i + 1], args[i + 2], "--inicio" in args)
+            print(f"Riesgo añadido: «{args[i + 2]}»")
+        else:
+            main(Path(args[0]), con_variantes="--sin-variantes" not in args)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as e:
         print(f"ERROR PRONUNCIACIÓN: {e}")
         sys.exit(1)

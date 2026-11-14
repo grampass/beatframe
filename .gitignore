@@ -9,3 +9,7 @@ ejemplo/audio/
 ejemplo/revision/
 ejemplo/render/
 ejemplo/*.mp4
+demo-voz/audio/
+demo-voz/revision/
+demo-voz/render/
+demo-voz/*.mp4

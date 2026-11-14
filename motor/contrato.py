@@ -24,7 +24,7 @@ def estructura(g, completo=True):
         for k in ("id", "titulo", "curso", "especialista", "concepto"):
             if not isinstance(g.get(k), str) or not g[k].strip():
                 e.append(f"'{k}' debe ser texto no vacío")
-        for k in ("formato", "estado", "ficha", "verificacion", "perfil_editorial", "receta"):
+        for k in ("formato", "estado", "ficha", "verificacion", "perfil_editorial", "receta", "idioma"):
             if k in g and not isinstance(g[k], str):
                 e.append(f"'{k}' debe ser texto")
         if "pruebas" in g and not isinstance(g["pruebas"], dict):
@@ -37,6 +37,9 @@ def estructura(g, completo=True):
     if "objetos" in g and (not isinstance(g["objetos"], dict) or
                            any(not isinstance(v, dict) or not isinstance(v.get("tipo"), str) for v in g["objetos"].values())):
         e.append("'objetos' debe ser un objeto {nombre: {tipo, pos, …}}")
+    if "ajustes_receta" in g and (not isinstance(g["ajustes_receta"], dict) or any(
+            not isinstance(k, str) or not isinstance(v, dict) for k, v in g["ajustes_receta"].items())):
+        e.append("'ajustes_receta' debe ser un objeto {receta: {ajuste: valor}}")
     if not isinstance(g.get("beats"), list) or not g["beats"]:
         return e + ["'beats' debe ser una lista no vacía"]
     vistos = set()

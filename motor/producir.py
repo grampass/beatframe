@@ -42,8 +42,9 @@ def clase_escena(fuente):
     return clases[0]
 
 
-def ejecutar_escena(carpeta, clase, run, final, sonido, perfil, solo=False, tramo=None):
-    datos = run / ("previo" if solo else "render-datos")
+def ejecutar_escena(carpeta, clase, run, final, sonido, perfil, solo=False, tramo=None, nombre=None):
+    nombre = nombre or ("previo" if solo else "render")
+    datos = run / ("render-datos" if nombre == "render" else nombre)
     datos.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, CALIDAD="alta" if final else "baja", PYTHONIOENCODING="utf-8",
                SONIDO="1" if sonido else "0", PERFIL_ZONA=perfil or "", REVISION_DIR=str(datos))
@@ -53,16 +54,16 @@ def ejecutar_escena(carpeta, clase, run, final, sonido, perfil, solo=False, tram
         env["SOLO_CHOQUES"] = "1"
     elif tramo:
         env["BEATS"] = tramo
-    media = run / "media"
+    media = run / ("media" if nombre in ("previo", "render") else f"media-{nombre}")   # en paralelo, sin pisarse
     orden = [PY, "-m", "manim", "render", "escena.py", clase, "--media_dir", media,
              "--disable_caching", "-v", "ERROR", "--progress_bar", "none"]
     if solo:
         orden.append("--dry_run")
     cod, log = correr(orden, cwd=carpeta, env=env)
-    (run / ("previo.log" if solo else "render.log")).write_text(log, encoding="utf-8")
+    (run / f"{nombre}.log").write_text(log, encoding="utf-8")
     if cod or "Traceback" in log:
         raise ValueError(f"{'Comprobación' if solo else 'Render'} falló; ver {run.name}/"
-                         f"{'previo' if solo else 'render'}.log: " + " ".join(log.splitlines()[-3:]))
+                         f"{nombre}.log: " + " ".join(log.splitlines()[-3:]))
     for nombre in ("choques.json", "tiempos-escena.json"):
         if not (datos / nombre).is_file():
             raise ValueError(f"La escena no generó {nombre}")
@@ -111,6 +112,30 @@ def comprobar_video(video, final, esperado=None):
     if errores:
         raise ValueError("; ".join(errores))
     return d
+
+
+def revisar_pronunciacion(carpeta, run, info, final):
+    """Escucha la voz con pronunciacion.py (caché por huella de audio). Aviso en vista previa; en el final, las marcas
+    sin aprobar bloquean: alguien tiene que escucharlas y aprobarlas (--aprobar) o cambiar el texto."""
+    if os.environ.get("PRONUNCIACION") == "0":
+        info.aviso("PRONUNCIACION_OMITIDA", "Filtro de pronunciación desactivado (PRONUNCIACION=0)")
+        return True
+    cod, log = correr([PY, MOTOR / "pronunciacion.py", carpeta, "--sin-variantes"])
+    (run / "pronunciacion.log").write_text(log, encoding="utf-8")
+    if cod:
+        info.aviso("PRONUNCIACION_NO_DISPONIBLE", "No se pudo escuchar la voz: " + " ".join(log.splitlines()[-1:]))
+        return True
+    marcas = leer_json(carpeta / "audio" / "pronunciacion-marcas.json", {}) or {}
+    info.datos["pronunciacion"] = marcas
+    if not marcas:
+        return info.paso("PRONUNCIACION", True, "sin palabras marcadas")
+    detalle = "; ".join(f"{bid}: " + ", ".join(f"«{m['palabra']}» se oye «{m['oido']}»" for m in ms) for bid, ms in marcas.items())
+    ayuda = (f" · Escuchar con variantes: motor\pronunciacion.py {carpeta.name}; si suena bien: "
+             f"--aprobar {' '.join(marcas)}; si no, cambiar el texto")
+    if final:
+        return info.paso("PRONUNCIACION", False, detalle + ayuda)
+    info.aviso("PRONUNCIACION", detalle + ayuda)
+    return True
 
 
 def main(carpeta, final=False, solo_choques=False, tramo=None, sonido=None, perfil_zona=None, forzar=False):
@@ -165,6 +190,8 @@ def _producir(carpeta, final, solo_choques, tramo, sonido, perfil_zona, forzar):
         if not info.paso("AUDIO_VIGENTE", cod == 0, " ".join(log.splitlines()[-1:])):
             return info.terminar()
         info.datos["voz"] = leer_json(carpeta / "audio" / "resumen-voz.json", {})
+        if not revisar_pronunciacion(carpeta, run, info, final):
+            return info.terminar()
         errores, avisos = validar(carpeta, con_audio=True, estricto=final)
         bloqueos = [a for a in avisos if getattr(a, "bloqueante", False)]
         for a in avisos:
@@ -181,14 +208,34 @@ def _producir(carpeta, final, solo_choques, tramo, sonido, perfil_zona, forzar):
         info.datos["firmas"].update(guion=sha256(carpeta / "guion.json"), escena=sha256(carpeta / "escena.py"))
         cache = CacheEtapas(carpeta / "revision" / "cache-etapas.json", automatico=False)
         previo = None if forzar else cache.vigente("previo", clave_pre)
-        if previo:
-            pre_dir = Path(previo["meta"]["directorio"])
-            info.paso("COMPROBACION_PREVIA", True, str(pre_dir), reutilizado=True)
-        else:
-            pre_dir, _ = ejecutar_escena(carpeta, clase, run, final, audio_activo, perfil_zona, solo=True)
-            if not comprobar_escena(pre_dir, info, "COMPROBACION_PREVIA", seleccion):
-                return info.terminar()
-            cache.guardar("previo", clave_pre, list(pre_dir.glob("*.json")), directorio=str(pre_dir))
+        # La vista previa va a 15 fps; el final a 30. Hay fallos que solo se ven a 30 (un subtítulo que dura un
+        # fotograma sobre el plano del otro personaje en un diálogo): en vista previa se comprueban también a 30 fps,
+        # sin dibujar y EN PARALELO con la de 15 (cada una tarda minutos; juntas, casi lo mismo que una).
+        clave_30 = firma(dict(previo=clave_pre, fps=30))
+        previo30 = True if final else (None if forzar else cache.vigente("previo30", clave_30))
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as hilos:
+            f15 = None if previo else hilos.submit(ejecutar_escena, carpeta, clase, run, final, audio_activo, perfil_zona,
+                                                  solo=True)
+            f30 = None if previo30 else hilos.submit(ejecutar_escena, carpeta, clase, run, True, audio_activo, perfil_zona,
+                                                    solo=True, nombre="previo-30fps")
+            if previo:
+                pre_dir = Path(previo["meta"]["directorio"])
+                info.paso("COMPROBACION_PREVIA", True, str(pre_dir), reutilizado=True)
+            else:
+                pre_dir, _ = f15.result()
+                if not comprobar_escena(pre_dir, info, "COMPROBACION_PREVIA", seleccion):
+                    if f30:
+                        f30.cancel()
+                    return info.terminar()
+                cache.guardar("previo", clave_pre, list(pre_dir.glob("*.json")), directorio=str(pre_dir))
+            if isinstance(previo30, dict):
+                info.paso("COMPROBACION_30FPS", True, previo30["meta"]["directorio"], reutilizado=True)
+            elif f30:
+                d30, _ = f30.result()
+                if not comprobar_escena(d30, info, "COMPROBACION_30FPS", seleccion):
+                    return info.terminar()
+                cache.guardar("previo30", clave_30, list(d30.glob("*.json")), directorio=str(d30))
         if solo_choques:
             if not info.paso("FUENTES_ESTABLES", firma(dependencias(carpeta)) == clave_fuentes and
                              plan_firma(carpeta) == info.datos["firmas"]["plan"], "Sin cambios durante la comprobación"):
