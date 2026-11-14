@@ -87,7 +87,7 @@ def titulo_en(img, texto, caja, tam_max, max_lineas=4, borde=0):
     """Escribe `texto` lo más grande posible dentro de caja (x0, y0, x1, y1). Última palabra en AMBAR."""
     dib = ImageDraw.Draw(img)
     x0, y0, x1, y1 = caja
-    for tam in range(tam_max, 20, -4):
+    for tam in range(tam_max, 9, -2):              # hasta 10 px: con una fuente ancha una palabra larga también cabe
         f = fuente(tam)
         lineas = partir(texto, f, x1 - x0, dib)
         alto = len(lineas) * tam * 1.12
