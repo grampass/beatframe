@@ -9,7 +9,7 @@ for padre in Path(__file__).resolve().parents:
         sys.path.insert(0, str(padre / "motor"))
         break
 else:
-    raise RuntimeError("Place the demo next to the motor folder")
+    import beatframe  # noqa: F401  (installed with pip: puts the engine modules on the path)
 
 import numpy as np
 from estudio import (EscenaEstudio, Plano, Circle, Create, Dot, FadeIn, Line, RoundedRectangle, VGroup,

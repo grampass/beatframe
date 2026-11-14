@@ -50,6 +50,9 @@ def ejecutar_escena(carpeta, clase, run, final, sonido, perfil, solo=False, tram
                SONIDO="1" if sonido else "0", PERFIL_ZONA=perfil or "", REVISION_DIR=str(datos))
     for k in ("BEATS", "SOLO_CHOQUES", "SIN_CHOQUES"):
         env.pop(k, None)
+    # La escena importa los módulos del motor por nombre (`from estudio import *`): así funciona también con el paquete
+    # instalado (pip) y con escenas fuera del repositorio, sin tocar sys.path en cada escena.
+    env["PYTHONPATH"] = os.pathsep.join(x for x in (str(MOTOR), env.get("PYTHONPATH", "")) if x)
     if solo:
         env["SOLO_CHOQUES"] = "1"
     elif tramo:
@@ -202,16 +205,22 @@ def _producir(carpeta, final, solo_choques, tramo, sonido, perfil_zona, forzar):
         entrada = dependencias(carpeta)
         clave_fuentes = firma(entrada)
         clave_base = firma(dict(entradas=entrada, final=final, tramo=tramo, sonido=audio_activo, perfil=perfil_zona))
-        clave_pre = firma(dict(base=clave_base, plan=plan_firma(carpeta)))
+        # La comprobación sin dibujar depende de las entradas y de los fps, no de si después se dibuja vista previa o
+        # final: la de 30 fps que ya hizo la vista previa vale para el final si nada cambió (ahorra ~2 min por final).
+        def clave_fps(fps):
+            return firma(dict(entradas=entrada, tramo=tramo, sonido=audio_activo, perfil=perfil_zona,
+                              plan=plan_firma(carpeta), fps=fps))
+        fps_principal = 30 if final else 15
+        clave_pre = clave_fps(fps_principal)
         escribir_json(run / "entradas.json", entrada)
         info.datos["firmas"] = dict(entradas=clave_fuentes, imagen=clave_base, plan=plan_firma(carpeta))
         info.datos["firmas"].update(guion=sha256(carpeta / "guion.json"), escena=sha256(carpeta / "escena.py"))
         cache = CacheEtapas(carpeta / "revision" / "cache-etapas.json", automatico=False)
-        previo = None if forzar else cache.vigente("previo", clave_pre)
+        previo = None if forzar else cache.vigente(f"previo{fps_principal}", clave_pre)
         # La vista previa va a 15 fps; el final a 30. Hay fallos que solo se ven a 30 (un subtítulo que dura un
         # fotograma sobre el plano del otro personaje en un diálogo): en vista previa se comprueban también a 30 fps,
         # sin dibujar y EN PARALELO con la de 15 (cada una tarda minutos; juntas, casi lo mismo que una).
-        clave_30 = firma(dict(previo=clave_pre, fps=30))
+        clave_30 = clave_fps(30)
         previo30 = True if final else (None if forzar else cache.vigente("previo30", clave_30))
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=2) as hilos:
@@ -228,7 +237,7 @@ def _producir(carpeta, final, solo_choques, tramo, sonido, perfil_zona, forzar):
                     if f30:
                         f30.cancel()
                     return info.terminar()
-                cache.guardar("previo", clave_pre, list(pre_dir.glob("*.json")), directorio=str(pre_dir))
+                cache.guardar(f"previo{fps_principal}", clave_pre, list(pre_dir.glob("*.json")), directorio=str(pre_dir))
             if isinstance(previo30, dict):
                 info.paso("COMPROBACION_30FPS", True, previo30["meta"]["directorio"], reutilizado=True)
             elif f30:
@@ -327,6 +336,14 @@ def _producir(carpeta, final, solo_choques, tramo, sonido, perfil_zona, forzar):
             os.replace(temporal, destino)
             info.datos["entrega"] = dict(archivo=str(destino), sha256=sha256(destino))
             info.paso("ENTREGA_ACTUALIZADA", True, destino.name)
+            from subtitulos import escribir as escribir_srt     # subtítulos para subir a la plataforma
+            info.paso("SUBTITULOS", True, escribir_srt(carpeta).name)
+            if final:                                           # portadas para subir: un fotograma sin subtítulo + título
+                try:
+                    from miniatura import miniaturas
+                    info.paso("MINIATURAS", True, ", ".join(m.name for m in miniaturas(carpeta)))
+                except Exception as e:                          # no bloquea la entrega: se rehacen a mano
+                    info.aviso("MINIATURAS", f"No se pudieron generar: {e}")
         else:
             info.datos["tramo"] = dict(beats=tramo, video=str(video), publicable=False)
         return info.terminar()

@@ -221,6 +221,25 @@ def sugerir_palabra(palabras, t_desde, fin, antes=0.15, min_dur=0.15):
     return validas[-1] if validas else None
 
 
+def bloques_subtitulos(palabras, max_palabras=3, max_letras=15):
+    """Reparte las palabras de un beat en los bloques que se ven juntos en pantalla: como mucho `max_palabras` y
+    `max_letras`, y se corta en una pausa (> 0,22 s). Una negación nunca cierra un bloque: pasa al siguiente, junto a
+    su verbo. La usan los subtítulos del video y el .srt (subtitulos.py), así ambos cortan igual."""
+    bloques, actual = [], []
+    for p in palabras:
+        pausa = actual and p["t"] - (actual[-1]["t"] + actual[-1]["d"]) > 0.22
+        largo = sum(len(q["w"]) + 1 for q in actual) + len(p["w"])
+        if actual and (len(actual) == max_palabras or largo > max_letras or pausa):
+            arrastre = []
+            if len(actual) > 1 and actual[-1]["w"].lower().strip("¿?¡!.,…") in ("no", "ni", "sin", "nunca"):
+                arrastre = [actual.pop()]
+            bloques.append(actual)
+            actual = arrastre
+        actual.append(p)
+    bloques.append(actual)
+    return bloques
+
+
 def _opacidades(mob):
     return [(sm, sm.get_fill_opacity(), sm.get_stroke_opacity(), sm.get_stroke_opacity(background=True))
             for sm in mob.family_members_with_points()]
@@ -744,21 +763,7 @@ class EscenaEstudio(Scene):
         eventos = []
         for b in self.g.beats:
             claves = {k.lower(): COLORES[v] for k, v in b.get("claves", {}).items()}
-            bloques, actual = [], []
-            for i, p in enumerate(b["palabras"]):
-                pausa = actual and p["t"] - (actual[-1]["t"] + actual[-1]["d"]) > 0.22
-                largo = sum(len(q["w"]) + 1 for q in actual) + len(p["w"])
-                if actual and (len(actual) == max_palabras or largo > max_letras or pausa):
-                    # Una negación nunca cierra un bloque: debe acompañar a su verbo.
-                    # Pasa al bloque siguiente, junto a su verbo.
-                    arrastre = []
-                    if len(actual) > 1 and actual[-1]["w"].lower().strip("¿?¡!.,…") in ("no", "ni", "sin", "nunca"):
-                        arrastre = [actual.pop()]
-                    bloques.append(actual)
-                    actual = arrastre
-                actual.append(p)
-            bloques.append(actual)
-            for bl in bloques:
+            for bl in bloques_subtitulos(b["palabras"], max_palabras, max_letras):
                 textos = [q["w"].upper() for q in bl]
                 for j, p in enumerate(bl):
                     txt = Text(" ".join(textos), font=FUENTE, font_size=tam, color=TIZA)

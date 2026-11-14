@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beatframe"
+version = "0.2.0"
+description = "Write a script, get a narrated, word-synced vertical animation. Animations wait for spoken words, not timestamps. Built on Manim."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+keywords = ["manim", "animation", "text-to-speech", "subtitles", "video", "explainer"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Graphics",
+    "Intended Audience :: Education",
+    "Development Status :: 3 - Alpha",
+]
+dependencies = [
+    "manim>=0.22,<0.23",
+    "numpy>=2",
+    "Pillow>=10",
+    "edge-tts>=7",
+]
+
+[project.optional-dependencies]
+voz = ["faster-whisper>=1.2"]
+
+[project.scripts]
+beatframe = "beatframe.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/grampass/beatframe"
+Issues = "https://github.com/grampass/beatframe/issues"
+
+[tool.setuptools]
+# El motor vive en motor/ y se instala como el paquete «beatframe»; sus módulos se importan por nombre
+# (`from estudio import *`) gracias a beatframe/__init__.py. Reestructurarlo en un paquete propio: issue #9.
+package-dir = {"beatframe" = "motor"}
+packages = ["beatframe", "beatframe.personajes", "beatframe.piezas"]

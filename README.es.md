@@ -2,9 +2,9 @@
 
 **Escribe un guion. Obtén una animación vertical narrada y sincronizada palabra a palabra.**
 
-![Demo narrada: un pequeño robot reacciona a cada palabra](docs/demo-voice.gif)
+![Demo narrada: un pequeño robot reacciona a cada palabra](https://raw.githubusercontent.com/grampass/beatframe/main/docs/demo-voice.gif)
 
-▶ [Ver la demo con sonido (MP4, 21 s, en inglés)](docs/demo-voice.mp4) · [English](README.md)
+▶ [Ver la demo con sonido (MP4, 21 s, en inglés)](https://github.com/grampass/beatframe/blob/main/docs/demo-voice.mp4) · [English](README.md)
 
 En un editor con línea de tiempo cada animación se ancla a un segundo; si cambias una frase de la narración, todo lo que viene después se descuadra. En beatframe las animaciones se anclan a **palabras** («en *empuja*, la pelota rueda»). La voz se genera (o se aporta) con el tiempo de cada palabra y la escena la espera, así que sigue sincronizada aunque cambie el texto.
 

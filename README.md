@@ -2,9 +2,9 @@
 
 **Write a script. Get a narrated, word-synced vertical animation.**
 
-![Narrated demo: a small robot reacts on each spoken word](docs/demo-voice.gif)
+![Narrated demo: a small robot reacts on each spoken word](https://raw.githubusercontent.com/grampass/beatframe/main/docs/demo-voice.gif)
 
-▶ [Watch the demo with sound (MP4, 21 s)](docs/demo-voice.mp4) · [Español](README.es.md)
+▶ [Watch the demo with sound (MP4, 21 s)](https://github.com/grampass/beatframe/blob/main/docs/demo-voice.mp4) · [Español](README.es.md)
 
 In a timeline editor, every animation is pinned to a time. Change one sentence of the narration and everything after it drifts. In beatframe, animations are pinned to **words**: "on *push*, the ball rolls". The voice is generated (or supplied) with word timings, and the scene waits for each word, so it stays in sync when the text changes.
 

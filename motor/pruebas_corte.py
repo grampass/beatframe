@@ -171,6 +171,54 @@ def c_vista_previa_comprueba_tambien_a_30_fps():
         vistos.clear()
         assert simular(p, s) == 0 and vistos == [], "con la escena igual, la comprobación a 30 fps se reutiliza"
 
+
+def c_srt_frases_y_marcas():
+    from subtitulos import cues, srt
+    pal = [dict(w=w, t=0.2 + 0.3 * i, d=0.25) for i, w in enumerate("hola mundo esto sigue".split())]
+    b = dict(texto="Hola, mundo. Esto sigue.", palabras=pal)
+    c = cues([b])
+    assert [x[2] for x in c] == ["Hola, mundo.", "Esto sigue."], c
+    assert c[0][1] <= c[1][0], "dos subtítulos a la vez"
+    salto = chr(10)
+    texto = srt(c)
+    assert texto.startswith("1" + salto + "00:00:00,200 --> 00:00:00,") and salto + "2" + salto in texto
+    largo = dict(texto=" ".join(["palabra"] * 12), palabras=[dict(w="palabra", t=i * 0.3, d=0.25) for i in range(12)])
+    assert all(len(x[2]) <= 42 for x in cues([largo]))
+
+
+def c_miniatura_titulo_cabe():
+    from PIL import Image, ImageDraw
+    from miniatura import fuente, titulo_en
+    img = Image.new("RGB", (600, 400))
+    tam = titulo_en(img, "UNA PALABRAMUYLARGUISIMAQUENOCABE", (10, 10, 400, 390), 120)
+    ancho = max(ImageDraw.Draw(img).textlength(l, font=fuente(tam)) for l in ["UNA", "PALABRAMUYLARGUISIMAQUENOCABE"])
+    assert ancho <= 390, f"el título se sale ({ancho:.0f} px)"
+
+
+def c_recopilacion_capitulos():
+    from recopilar import capitulos, marca
+    assert marca(0) == "0:00" and marca(64.9) == "1:04" and marca(3725) == "1:02:05"
+    assert capitulos(["A", "B"], [0.0, 64.2]).splitlines() == ["0:00 A", "1:04 B"]
+
+
+def c_final_reutiliza_la_comprobacion_30fps():
+    from pruebas_flujo import Simulador, audio_fixture, fixture, simular
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d); g = fixture(p); audio_fixture(p, g)
+        s = Simulador(p)
+        vistos = []
+        orig = s.correr
+        def correr(cmd, cwd=None, env=None):
+            if env and env.get("SOLO_CHOQUES") == "1":
+                vistos.append(env.get("CALIDAD"))
+            return orig(cmd, cwd, env)
+        s.correr = correr
+        assert simular(p, s) == 0 and sorted(vistos) == ["alta", "baja"], vistos
+        vistos.clear()
+        with patch("producir.preparar_revision", return_value="vigente"):
+            simular(p, s, final=True)
+        assert vistos == [], f"el final repitió la comprobación sin dibujar: {vistos}"
+
 PRUEBAS = [
     ("corte · espera a mitad de la pausa antes del beat siguiente", c_corte_espera_a_mitad_de_pausa),
     ("corte · sin espera al inicio ni tras el último beat", c_corte_no_espera_al_inicio_ni_al_final),
@@ -187,4 +235,8 @@ PRUEBAS = [
     ("voz · aprobar silencia ese audio, guarda la frase y caduca con voz nueva", c_aprobar_silencia_ese_audio_y_guarda_la_frase),
     ("voz · producir avisa en la vista previa y bloquea el final", c_producir_avisa_en_vista_previa_y_bloquea_el_final),
     ("flujo · la vista previa también comprueba a 30 fps (con caché)", c_vista_previa_comprueba_tambien_a_30_fps),
+    ("srt · frases con el texto del guion, sin solaparse", c_srt_frases_y_marcas),
+    ("miniatura · el título cabe aunque una palabra sea larga", c_miniatura_titulo_cabe),
+    ("recopilación · marcas de capítulo para la descripción", c_recopilacion_capitulos),
+    ("flujo · el final reutiliza la comprobación a 30 fps de la vista previa", c_final_reutiliza_la_comprobacion_30fps),
 ]

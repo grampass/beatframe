@@ -13,3 +13,6 @@ demo-voz/audio/
 demo-voz/revision/
 demo-voz/render/
 demo-voz/*.mp4
+dist/
+build/
+*.egg-info/

@@ -9,7 +9,7 @@ for padre in Path(__file__).resolve().parents:
         sys.path.insert(0, str(padre / "motor"))
         break
 else:
-    raise RuntimeError("Colocar el ejemplo junto a la carpeta motor")
+    import beatframe  # noqa: F401  (installed with pip: puts the engine modules on the path)
 
 from estudio import EscenaEstudio, Circle, VGroup, LEFT
 from personajes.demo import Demo
