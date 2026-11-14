@@ -10,7 +10,10 @@ Guion (campos opcionales):
                 "nota_a": {"tipo": "NotaMesa", "pos": [0.72, -3.48], "giro": -6}}
     beat "acciones": [{"palabra": "Sí", "hace": "empujar", "objeto": "taza2", "hasta": [-0.62, -3.88]},
                       {"palabra": "frío", "hace": "tocar", "punto": [2.35, -3.66]},
-                      {"palabra": "La", "hace": "leer_nota", "texto": "Pieza lista", "girar": "lista"}]
+                      {"palabra": "La", "hace": "leer_nota", "texto": "Pieza lista", "girar": "lista"},
+                      {"palabra": "bueno", "hace": "pose", "pose": "nuca"},
+                      {"palabra": "sí", "hace": "gesto", "gesto": "asentir", "veces": 2}]
+Las poses, expresiones y gestos se comprueban contra el personaje de la receta al generar (no en el render).
 Vocabulario de `hace`: ver ACCIONES.
 """
 import ast
@@ -31,6 +34,7 @@ ACCIONES = {
     "escuchar": ((), "personaje: escucha"),
     "detener_lapiz": ((), "personaje: detiene el lápiz"),
     "tachar": ((), "personaje: el tachón que queda"),
+    "gesto": (("gesto",), "secuencia del personaje que vuelve a su estado: asentir, negar, suspirar, golpetear, encogerse…"),
 }
 TIPOS_OBJETO = {"TazaVacia": ("pos",), "NotaMesa": ("pos",)}
 
@@ -75,7 +79,38 @@ def _objetos(g, RECETAS):
     return objs, lineas, por_receta
 
 
-def _accion(bid, a, palabras, objs, personaje, abierto=None):
+def _clase_de(receta):
+    """Clase del personaje de una receta (registro), para validar poses, expresiones y gestos al generar."""
+    try:
+        from recetas import RECETAS
+        from registro import registro_actual
+        return registro_actual().personajes.get(RECETAS.get(receta, {}).get("personaje"))
+    except Exception:
+        return None
+
+
+def _validar_contra(bid, a, clase):
+    """Un nombre que el personaje no tiene se detecta aquí, no en el render (menos reintentos)."""
+    if clase is None:
+        return
+    nombre = clase.__name__
+    if a["hace"] == "pose" and a["pose"] not in clase.POSES:
+        raise ValueError(f"{bid}: {nombre} no tiene la pose {a['pose']!r} (tiene: {sorted(clase.POSES)}).")
+    if a["hace"] == "expresion" and a["expresion"] not in getattr(clase, "EXPRESIONES", {}):
+        raise ValueError(f"{bid}: {nombre} no tiene la expresión {a['expresion']!r} "
+                         f"(tiene: {sorted(getattr(clase, 'EXPRESIONES', {}))}).")
+    metodo = a.get("gesto") if a["hace"] == "gesto" else (a["hace"] if a["hace"] in ("leer", "escuchar", "detener_lapiz", "tachar") else None)
+    if metodo is not None and (metodo.startswith("_") or not callable(getattr(clase, metodo, None))):
+        gestos = sorted(n for n in ("asentir", "negar", "suspirar", "golpetear", "encogerse", "leer", "escuchar",
+                                    "detener_lapiz", "tachar") if callable(getattr(clase, n, None)))
+        raise ValueError(f"{bid}: {nombre} no sabe {metodo!r} (sabe: {gestos}).")
+    if metodo is not None and "veces" in a:
+        import inspect
+        if "veces" not in inspect.signature(getattr(clase, metodo)).parameters:
+            raise ValueError(f"{bid}: {nombre}.{metodo}() no acepta 'veces'.")
+
+
+def _accion(bid, a, palabras, objs, personaje, abierto=None, clase=None):
     hace, palabra = a["hace"], a["palabra"]
     if hace not in ACCIONES:
         raise ValueError(f"{bid}: acción {hace!r} desconocida (válidas: {sorted(ACCIONES)}).")
@@ -86,6 +121,7 @@ def _accion(bid, a, palabras, objs, personaje, abierto=None):
         raise ValueError(f"{bid}: la palabra {palabra!r} de la acción {hace!r} no está en el texto.")
     if "objeto" in a and a["objeto"] not in objs:
         raise ValueError(f"{bid}: objeto {a['objeto']!r} no declarado en 'objetos'.")
+    _validar_contra(bid, a, clase)
     n, rt, antes = int(a.get("n", 0)), float(a.get("run_time", 0.45)), float(a.get("antes", 0.15))
     en = lambda *anims, rt=rt, p=palabra: f"        self.en({bid!r}, {p!r}, {', '.join(anims)}, n={n}, run_time={rt}, antes={antes})"
     if hace in ("pose", "expresion"):
@@ -121,6 +157,10 @@ def _accion(bid, a, palabras, objs, personaje, abierto=None):
                 f"        self.en({bid!r}, {girar!r}, {v}_nota.girar(0.55), run_time=0.55, antes=0.4)",
                 f"        self.hasta(g[{bid!r}]['fin'] - 0.62)",
                 f"        self.play({v}_nota.girar(0.5), run_time=0.5)"]
+    if hace == "gesto":       # la secuencia dura lo suyo: run_time por defecto 0.9 s
+        veces = f"veces={int(a['veces'])}, " if "veces" in a else ""
+        rt_g = float(a.get("run_time", 0.9))
+        return [en(f"{personaje}.{a['gesto']}({veces}run_time={rt_g})", rt=rt_g)]
     return [en(f"{personaje}.{hace}()", rt=float(a.get("run_time", 0.5)))]
 
 
@@ -190,7 +230,7 @@ def crear(carpeta, destino=None):
             abierto = None
         if acciones:
             for a in acciones:
-                cuerpo += _accion(bid, a, palabras, objs, "personaje", abierto)
+                cuerpo += _accion(bid, a, palabras, objs, "personaje", abierto, _clase_de(receta_actual))
                 if a.get("hace") == "leer_nota":
                     abierto = f"ins_{bid}"
             cuerpo.append("        # Revisar: miradas, tiempos y lo que el visual pida además de estas acciones.")

@@ -95,6 +95,22 @@ def comprobar_escena(datos, info, codigo, seleccion=None):
                      "; ".join(h.get("texto", str(h)) for h in hs[:3]))
 
 
+def alinear_audio_tramo(video, desde):
+    """Render por tramos (--beats): Manim deja en el MP4 la voz de TODO el guion, pero la imagen solo del tramo.
+    Se recorta el audio a [desde, desde + duración de la imagen] para que el tramo se vea y se oiga alineado
+    (antes, el tramo nunca se entregaba: «audio ausente o duración desalineada»)."""
+    from sonido import duraciones_video
+    d = duraciones_video(video)
+    if "audio" not in d or "video" not in d or d["audio"] - d["video"] <= 0.1:
+        return d
+    tmp = Path(video).with_name(Path(video).stem + ".tramo.mp4")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(video), "-ss", f"{max(0.0, desde):.3f}", "-i", str(video),
+                    "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                    "-t", f"{d['video']:.3f}", str(tmp)], check=True)
+    tmp.replace(video)
+    return duraciones_video(video)
+
+
 def comprobar_video(video, final, esperado=None):
     from sonido import completar_audio
     d = completar_audio(video)
@@ -276,6 +292,8 @@ def _producir(carpeta, final, solo_choques, tramo, sonido, perfil_zona, forzar):
         from nucleo import Guion
         guion = Guion(carpeta)
         esperado = None if tramo else guion.total
+        if tramo:
+            alinear_audio_tramo(video_base, desde)
         # Normaliza una vez el base y actualiza su firma antes de mezclar/reutilizarlo.
         comprobar_video(video_base, final, esperado)
         cache.guardar("base", clave_base, [video_base, *real_dir.glob("*.json")],
@@ -299,6 +317,15 @@ def _producir(carpeta, final, solo_choques, tramo, sonido, perfil_zona, forzar):
         if audio_activo and not mezcla:
             cache.guardar("mezcla", clave_mezcla, [video, video.with_suffix(".sonido.json")], video=str(video))
         info.paso("FORMATO_Y_AUDIO", True, f"video {duraciones['video']:.3f} s; audio {duraciones['audio']:.3f} s")
+        if not tramo:                                   # bucle, primer segundo y vacío: avisos baratos (4 fotogramas)
+            try:
+                from retencion import avisos as avisos_retencion, medir
+                medidas = medir(video_base)
+                info.datos["retencion"] = medidas
+                for codigo, mensaje in avisos_retencion(medidas, bucle=g.get("bucle", True) is not False):
+                    info.aviso(codigo, mensaje)
+            except Exception as e:                      # nunca bloquea la entrega
+                info.aviso("RETENCION_NO_MEDIDA", str(e))
         clave_hojas = firma(dict(base=clave_base, video=sha256(video_base), datos=sha256(real_dir / "choques.json"), tramo=tramo))
         hojas = None if forzar else cache.vigente("hojas", clave_hojas)
         if hojas:

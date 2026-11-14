@@ -31,6 +31,8 @@ def estructura(g, completo=True):
             e.append("'pruebas' debe ser un objeto")
         if "sonido" in g and not isinstance(g["sonido"], bool):
             e.append("'sonido' debe ser true o false")
+        if "bucle" in g and not isinstance(g["bucle"], bool):
+            e.append("'bucle' debe ser true o false")
         if "dependencias" in g and (not isinstance(g["dependencias"], list) or
                                      any(not isinstance(p, str) for p in g["dependencias"])):
             e.append("'dependencias' debe ser una lista de rutas")

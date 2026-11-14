@@ -219,6 +219,42 @@ def c_final_reutiliza_la_comprobacion_30fps():
             simular(p, s, final=True)
         assert vistos == [], f"el final repitió la comprobación sin dibujar: {vistos}"
 
+
+def c_retencion_avisos():
+    from retencion import avisos
+    bien = dict(bucle=2.5, arranque=9.0, contenido=0.3)
+    assert avisos(bien) == []
+    codigos = [c for c, _ in avisos(dict(bucle=29.0, arranque=0.4, contenido=0.01))]
+    assert codigos == ["BUCLE", "ARRANQUE", "VACIO"], codigos
+    assert [c for c, _ in avisos(dict(bucle=29.0, arranque=9.0, contenido=0.3), bucle=False)] == []
+
+
+def c_generador_valida_contra_el_personaje():
+    from generar_escena import _accion
+    from personajes.demo import Demo
+    pal = ["vamos", "bien"]
+    assert "personaje.anim(pose='senala')" in _accion("b1", dict(palabra="vamos", hace="pose", pose="senala"), pal, {}, "personaje", clase=Demo)[0]
+    for mala, texto in ((dict(palabra="vamos", hace="pose", pose="nuca"), "no tiene la pose"),
+                        (dict(palabra="vamos", hace="gesto", gesto="asentir"), "no sabe"),
+                        (dict(palabra="vamos", hace="expresion", expresion="melancolia"), "no tiene la expresión")):
+        try:
+            _accion("b1", mala, pal, {}, "personaje", clase=Demo)
+        except ValueError as e:
+            assert texto in str(e), e
+            continue
+        raise AssertionError(f"aceptó {mala}")
+
+
+def c_retraso_nombra_palabra_y_causa():
+    falsa = SimpleNamespace(renderer=SimpleNamespace(time=5.0), t=0.0, _tramo=None, _retrasos=[],
+                            _beat_actual=lambda: "b3", _ultima_en="«Escribir» de b3 (0.90 s)", _foto=lambda: None,
+                            wait=lambda d: None)
+    with contextlib.redirect_stdout(io.StringIO()) as salida:
+        EscenaEstudio.hasta(falsa, 4.6, palabra="borrar")
+    r = falsa._retrasos[0]
+    assert r["palabra"] == "borrar" and "Escribir" in r["causa"] and abs(r["retraso"] - 0.4) < 1e-9, r
+    assert "«borrar»" in salida.getvalue() and "Escribir" in salida.getvalue()
+
 PRUEBAS = [
     ("corte · espera a mitad de la pausa antes del beat siguiente", c_corte_espera_a_mitad_de_pausa),
     ("corte · sin espera al inicio ni tras el último beat", c_corte_no_espera_al_inicio_ni_al_final),
@@ -239,4 +275,7 @@ PRUEBAS = [
     ("miniatura · el título cabe aunque una palabra sea larga", c_miniatura_titulo_cabe),
     ("recopilación · marcas de capítulo para la descripción", c_recopilacion_capitulos),
     ("flujo · el final reutiliza la comprobación a 30 fps de la vista previa", c_final_reutiliza_la_comprobacion_30fps),
+    ("retención · avisos de bucle, primer segundo y vacío", c_retencion_avisos),
+    ("generador · poses, expresiones y gestos se validan contra el personaje", c_generador_valida_contra_el_personaje),
+    ("retraso · el aviso nombra la palabra tarde y la animación que lo causó", c_retraso_nombra_palabra_y_causa),
 ]

@@ -725,7 +725,7 @@ class EscenaEstudio(Scene):
         (otra marca: (bid, palabra); por defecto, el final del beat). Si el hueco es menor que `run_time`, las acorta;
         si ni así caben (menos de `min_dur`), avisa con el beat y la palabra."""
         desde = self.renderer.time
-        self.hasta(self.g.t_palabra(bid, palabra, n) - antes)
+        self.hasta(self.g.t_palabra(bid, palabra, n) - antes, palabra=palabra)
         fin = (self.g.t_palabra(*tope) - 0.05) if tope else self.g[bid]["fin"]
         hueco = fin - self.renderer.time
         if hueco < min_dur:
@@ -734,7 +734,9 @@ class EscenaEstudio(Scene):
             self._retrasos.append(dict(beat=bid, palabra=palabra, t=float(fin), retraso=float(min_dur - hueco),
                                        sugerencia=otra))
             print(f"[AVISO] vas {min_dur - hueco:.2f} s tarde respecto a t={fin:.2f} (en «{palabra}» de {bid} no caben las animaciones{pista})")
-        self.play(*anims, run_time=max(min_dur, min(run_time, hueco)), **kw)
+        dura = max(min_dur, min(run_time, hueco))
+        self._ultima_en = f"«{palabra}» de {bid} ({dura:.2f} s)"
+        self.play(*anims, run_time=dura, **kw)
 
     # ----- HUD -----
     def _barra(self, y=7.35, x0=-4.0, x1=4.0, hueco=0.12):
@@ -793,8 +795,10 @@ class EscenaEstudio(Scene):
         return sub
 
     # ----- Ritmo -----
-    def hasta(self, t_abs):
-        """Espera hasta el instante absoluto t_abs. Si ya pasó, avisa: la animación se comió tiempo del beat."""
+    def hasta(self, t_abs, palabra=None):
+        """Espera hasta el instante absoluto t_abs. Si ya pasó, avisa: la animación se comió tiempo del beat.
+        El aviso nombra la última animación anclada con en() (la que suele causar el retraso) y, si viene de en(),
+        la palabra que llegó tarde: así se corrige sin investigar (2026-11-14)."""
         self.t = self.renderer.time
         falta = t_abs - self.t
         if falta > 2 / config.frame_rate:
@@ -810,8 +814,16 @@ class EscenaEstudio(Scene):
         if falta > 1 / config.frame_rate:
             self.wait(falta)
         elif falta < -0.15:
-            self._retrasos.append(dict(beat=self._beat_actual(), t=float(t_abs), retraso=float(-falta)))
-            print(f"[AVISO] vas {-falta:.2f} s tarde respecto a t={t_abs:.2f}")
+            causa = getattr(self, "_ultima_en", None)
+            registro = dict(beat=self._beat_actual(), t=float(t_abs), retraso=float(-falta))
+            if palabra:
+                registro["palabra"] = palabra
+            if causa:
+                registro["causa"] = causa
+            self._retrasos.append(registro)
+            donde = f" (para «{palabra}»)" if palabra else ""
+            por = f": la animación anterior, en {causa}, terminó tarde; acórtala o ánclala antes" if causa else ""
+            print(f"[AVISO] vas {-falta:.2f} s tarde respecto a t={t_abs:.2f}{donde}{por}")
 
     def fin_beat(self, bid):
         self.hasta(self.g[bid]["fin"])
