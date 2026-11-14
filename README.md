@@ -60,7 +60,7 @@ guion.json ─► voice + word timings ─► pronunciation check ─► dry run
 - The API and the messages are in **Spanish** (`escena`, `guion`, `hasta`, `fin_beat`…). English aliases are a welcome first contribution.
 - Speech uses `edge-tts`, an external service: the narrated demo needs internet. The offline example and the tests do not.
 - The composition checks sample the animation; they do not certify every pixel, the science or the editing. Watch the result.
-- Windows is the tested platform; Linux runs the test suite in CI; macOS is untested.
+- Windows is the tested platform; Linux runs the test suite in CI; macOS is untested. Two tests need LaTeX (Manim numbers).
 - Not on PyPI yet: clone the repository and run from its root.
 
 ## Configuration

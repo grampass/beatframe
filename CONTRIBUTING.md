@@ -13,7 +13,7 @@ python -m pip install -r requirements-publico.txt
 python motor/pruebas_motor.py
 ```
 
-You also need FFmpeg and the system packages Manim requires ([installation guide](https://docs.manim.community/en/stable/installation.html)). The tests need no network and no speech service.
+You also need FFmpeg and the system packages Manim requires ([installation guide](https://docs.manim.community/en/stable/installation.html)), including a LaTeX distribution: two tests use Manim numbers, which are typeset with LaTeX. The tests need no network and no speech service.
 
 ## Before opening a pull request
 

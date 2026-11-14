@@ -44,7 +44,7 @@
     "motor/pruebas_detector.py": "6f10e607d05d22cbb7a80038f7b9f86ad560684ba17c526f8fc27638538f0cee",
     "motor/pruebas_compatibilidad.py": "9f5f641033b7eacbad66255a75082a248d1cee536c644d0276b69c5303dcc817",
     "motor/pruebas_soporte.py": "ed37c0f39c3811d7bfa119ba56134b9ad7fa4fd1cadd98c2114a0c840b0db9ff",
-    "README.md": "d2a8a75cf0bb1ffc4c8bea263af8dfd54639d0e59a0cde64b1d7f0ae5fd0522c",
+    "README.md": "1067d84e22d6fd3ba073cef4ca907397498566dfe85603f223e79e802018badb",
     "README.es.md": "da57aee4cc31cb25440b9d781c1889231ff21517c39940e7731f46bdba10a56b",
     "LICENSE": "516a93090762f059d9b9c62d80e082296450c34142449bef61d5d7d40a5ea11a",
     "requirements-publico.txt": "b599b3f5f16a8b582e07eb1a060f2f6770a9971f5439d5de3cc29a299b77de12",
@@ -61,12 +61,12 @@
     "demo-voz/ejecutar.py": "a7b8a8557c79fb3cb5e3fcc66deae9d3c1de2fcb7583f5b4c31e6e8f71c91565",
     "docs/demo-voice.gif": "cd39cdbeee685aab31cc1e8793801f3c547bb3bfad53e382936de8ad752876f4",
     "docs/demo-voice.mp4": "1b938384fd11e8129d8686a2c67b6eb5f1016627aac1c6a3feca80495bdb5159",
-    "CONTRIBUTING.md": "2dfb51cf5cb131f844d009db30e5ac387067bad385a260effad26f9b2fb3eea2",
+    "CONTRIBUTING.md": "7e8268a879ab2597f4fcaad6aeab2e9f4e383a35caf7c1eafac5e3be3969d8aa",
     "CODE_OF_CONDUCT.md": "259d32f6bb538f8c8a9feedeb7c436fa3a7a25a0af9b87ea2df768dfb8526e68",
     ".github/PULL_REQUEST_TEMPLATE.md": "9bac34d6812ec639ca573552c8b4edf6071e79903bb25bf32331e88773df4f4c",
     ".github/ISSUE_TEMPLATE/bug.md": "f24c42494b1d557a5c01e39acaf49f8daa5651c12f6fb9c74389eca5522c224f",
     ".github/ISSUE_TEMPLATE/idea.md": "c12a79b2cd8a0d75c39dc0b4d5405b7c19ee66e1a4ee4e394aa5003b34aeb86c",
-    ".github/workflows/pruebas.yml": "5ada5e02d80f13e273236a81570c5fb73277abc129bba4fc05b319bd48370946"
+    ".github/workflows/pruebas.yml": "ba7cef4308dd64b93cbae7e2c4c8d91ae99d6b9512ede7950f079cc00fec14b5"
   },
   "pruebas": 0,
   "ejemplo": 0

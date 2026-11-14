@@ -16,8 +16,8 @@ jobs:
       MOTOR_CONFIG: "-"
       PYTHONIOENCODING: utf-8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -25,7 +25,8 @@ jobs:
       - name: System packages for Manim
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg libcairo2-dev libpango1.0-dev pkg-config fonts-liberation
+          sudo apt-get install -y --no-install-recommends ffmpeg libcairo2-dev libpango1.0-dev pkg-config fonts-liberation \
+            texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvisvgm   # two tests use Manim numbers (LaTeX)
       - name: Python packages
         run: python -m pip install -r requirements-publico.txt
       - name: Core tests (no network)
